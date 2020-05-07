@@ -240,21 +240,33 @@ func InputScores(ctx context.Context, challenges firestore.Query) {
 			log.Println(err)
 		}
 
-		fmt.Printf("%d-%d Div %s: %s (rank %d) vs %s (rank %d)\n", challenge.Round, challenge.Code,
-			challenge.Division.String(), challenge.Challenger, challenge.ChallengerRank,
-			challenge.Defender, challenge.DefenderRank)
-		fmt.Printf("Input score for challenger %s: ", challenge.Challenger)
-		var cs, ds int
-		fmt.Scanf("%d", &cs)
-		fmt.Printf("Input score for defender %s: ", challenge.Defender)
-		fmt.Scanf("%d", &ds)
-		challenge.ChallengerScore = cs
-		challenge.DefenderScore = ds
-		_, err = doc.Ref.Set(ctx, challenge)
-		if err != nil {
-			log.Printf("Error occurred writing to Firestore: %s", err)
+		for {
+			fmt.Printf("[%d-%d] Div %s: %s (%d位) vs %s (%d位)\n", challenge.Round, challenge.Code,
+				challenge.Division.String(), challenge.Challenger, challenge.ChallengerRank,
+				challenge.Defender, challenge.DefenderRank)
+			fmt.Printf("Input score for challenger %s: ", challenge.Challenger)
+			var cs, ds int
+			fmt.Scanf("%d", &cs)
+			fmt.Printf("Input score for defender %s: ", challenge.Defender)
+			fmt.Scanf("%d", &ds)
+			if cs+ds >= 4 && cs+ds <= 7 && (cs == 4 || ds == 4) {
+				challenge.ChallengerScore = cs
+				challenge.DefenderScore = ds
+				_, err = doc.Ref.Set(ctx, challenge)
+				if err != nil {
+					log.Printf("Error occurred writing to Firestore: %s", err)
+				}
+				fmt.Println("Written to firebase.")
+				break
+			} else {
+				var s string
+				fmt.Println("Invalid score. Try again? y/n")
+				fmt.Scanln(&s)
+				if s != "y" {
+					break
+				}
+			}
 		}
-		fmt.Println("Written to firebase.")
 	}
 }
 
