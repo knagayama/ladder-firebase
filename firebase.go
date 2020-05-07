@@ -105,6 +105,33 @@ func InitRanking(ctx context.Context, client *firestore.Client, currentRound int
 // InputScores uploads challenge scores based on user input.
 func InputScores(ctx context.Context, client *firestore.Client, currentRound int) {
 	// Read challenges for the current round and input the scores.
+	dsnap, err := client.Collection("challenges").Doc(strconv.Itoa(currentRound)).Get(ctx)
+	if err != nil {
+		log.Fatalln("Error reading challenges from Firestore: ", err)
+	}
+
+	data := dsnap.Data()
+
+	for i := 1; i <= len(data); i++ {
+		challenge := data[strconv.Itoa(i)].(map[string]interface{})
+		fmt.Printf("%d-%d Div %s: %s (rank %d) vs %s (rank %d)\n", challenge["Round"], challenge["Code"],
+			challenge["Division"], challenge["Challenger"], challenge["ChallengerRank"],
+			challenge["Defender"], challenge["DefenderRank"])
+		fmt.Printf("Input score for challenger %s: ", challenge["Challenger"])
+		var cs, ds int
+		fmt.Scanf("%d", &cs)
+		fmt.Printf("Input score for defender %s: ", challenge["Defender"])
+		fmt.Scanf("%d", &ds)
+		challenge["ChallengerScore"] = cs
+		challenge["DefenderScore"] = ds
+		_, err = client.Collection("challenges").Doc(strconv.Itoa(currentRound)).Set(ctx, map[string]interface{}{
+			strconv.Itoa(i): challenge,
+		}, firestore.MergeAll)
+		if err != nil {
+			log.Printf("Error occurred writing to Firestore: %s", err)
+		}
+		fmt.Println("Written to firebase.")
+	}
 }
 
 // GenerateRanking generates ranking for the current round based on the last challenge scores.
