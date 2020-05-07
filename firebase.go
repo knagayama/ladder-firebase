@@ -149,11 +149,11 @@ type Challenge struct {
 }
 
 // InitTeams loads a local csv file given by path and uploads it to Firestore.
-func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string) {
+func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string) error {
 	// Load team CSV file.
 	csvfile, err := os.Open(path)
 	if err != nil {
-		log.Fatalln("Couldn't open the csv file", err)
+		return err
 	}
 
 	teamsDoc := make([]map[string]string, 0)
@@ -161,7 +161,7 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 	r := csv.NewReader(csvfile)
 	localTeams, err := r.ReadAll()
 	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 	for _, team := range localTeams {
 		doc := make(map[string]string)
@@ -190,9 +190,10 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 		name := doc["name"]
 		_, err := teams.Doc(name).Set(ctx, doc)
 		if err != nil {
-			log.Printf("Error writing to teams collection: %s", err)
+			return err
 		}
 	}
+	return nil
 }
 
 // InitRanking initializes the ranking based on user input.
@@ -421,7 +422,10 @@ func main() {
 		fmt.Println("Init teams? y/n")
 		fmt.Scanln(&s)
 		if s == "y" {
-			InitTeams(ctx, teams, "spladder-teams.csv")
+			err = InitTeams(ctx, teams, "spladder-teams.csv")
+			if err != nil {
+				log.Fatalln("Error initialising teams:", err)
+			}
 		}
 
 		// Manually seed the initial ranking.
