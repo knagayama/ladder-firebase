@@ -225,7 +225,7 @@ func InitRanking(ctx context.Context, teams *firestore.CollectionRef, ranking *f
 
 // InputScores uploads challenge scores based on user input.
 func InputScores(ctx context.Context, challenges firestore.Query) {
-	// Read challengesng for the current round and input the scores.
+	// Read challenges for the current round and input the scores.
 	iter := challenges.Documents(ctx)
 	for {
 		doc, err := iter.Next()
@@ -272,11 +272,11 @@ func InputScores(ctx context.Context, challenges firestore.Query) {
 
 // GenerateRanking generates ranking for the current round based on the last challenge scores.
 func GenerateRanking(ctx context.Context, ranking *firestore.DocumentRef, challenges firestore.Query) {
-	// Read the scores from last challenge scores.
-
-	// Identify the winner and the loser for each division.
+	// Read the scores from last challenge scores and identify the winner and the loser for each division.
 
 	// Swap the ranking for loser of the upper division and the winner of the lower division.
+
+	// Generate ranking and upload to Firestore.
 }
 
 // CreateChallenges generate challenges based on the current team ranking and uploads it to Firestore.
