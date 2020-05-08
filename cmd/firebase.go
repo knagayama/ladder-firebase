@@ -148,12 +148,32 @@ type Challenge struct {
 	Division        Division `firestore:"Division"`
 }
 
+// TeamMetadata holds metrics for a team per round.
+type TeamMetadata struct {
+	Team          string   `firestore:"Team"`
+	Division      Division `firestore:"Division"`
+	Round         Round    `firestore:"Round"`
+	NumWins       int      `firestore:"NumWins"`
+	NumLosses     int      `firestore:"NumLosses"`
+	NumSetsGained int      `firestore:"NumSetsGained"`
+	NumSetsLost   int      `firestore:"NumSetsLost"`
+}
+
+// DivisionMetadata holds metrics for a division per round.
+type DivisionMetadata struct {
+	Division Division `firestore:"Division"`
+	Winner   string   `firestore:"Winner"`
+	Loser    string   `firestore:"Loser"`
+	Neutral  string   `firestore:"Neutral"`
+}
+
 // InitTeams loads a local csv file given by path and uploads it to Firestore.
-func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string) error {
+func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string) (int, error) {
+	teamCount := 0
 	// Load team CSV file.
 	csvfile, err := os.Open(path)
 	if err != nil {
-		return err
+		return teamCount, err
 	}
 
 	teamsDoc := make([]map[string]string, 0)
@@ -161,7 +181,7 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 	r := csv.NewReader(csvfile)
 	localTeams, err := r.ReadAll()
 	if err != nil {
-		return err
+		return teamCount, err
 	}
 	for _, team := range localTeams {
 		doc := make(map[string]string)
@@ -182,6 +202,7 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 					doc["player5"] = name
 				}
 			}
+			teamCount++
 		}
 		teamsDoc = append(teamsDoc, doc)
 	}
@@ -190,10 +211,10 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 		name := doc["name"]
 		_, err := teams.Doc(name).Set(ctx, doc)
 		if err != nil {
-			return err
+			return teamCount, err
 		}
 	}
-	return nil
+	return teamCount, nil
 }
 
 // InitRanking initializes the ranking based on user input.
@@ -271,27 +292,150 @@ func InputScores(ctx context.Context, challenges firestore.Query) {
 }
 
 // GenerateRanking generates ranking for the current round based on the last challenge scores.
-func GenerateRanking(ctx context.Context, ranking *firestore.DocumentRef, challenges firestore.Query) {
-	// Read the scores from last challenge scores and identify the winner and the loser for each division.
+func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, challenges firestore.Query) error {
+	teamMetrics := make(map[string]*TeamMetadata)
+	divisionMetrics := make(map[Division]*DivisionMetadata)
+	divisionToTeam := make(map[Division][]string)
+	localRank := []string{""}
+	rankToUpload := make(map[string]string)
+	ranking := tournament.Collection(("ranking"))
+	var nextRound Round
 
-	// Swap the ranking for loser of the upper division and the winner of the lower division.
+	// Compute team level metrics for the round.
+	iter := challenges.Documents(ctx)
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		var challenge Challenge
+		if err = doc.DataTo(&challenge); err != nil {
+			return err
+		}
+		// Populate challenger related metrics
+		nextRound = challenge.Round + 1
+		var challenger, defender TeamMetadata
+		if val, ok := teamMetrics[challenge.Challenger]; ok {
+			challenger = *val
+		} else {
+			challenger.Team = challenge.Challenger
+			challenger.Round = challenge.Round
+			challenger.Division = challenge.Division
+			teamMetrics[challenge.Challenger] = &challenger
+			divisionToTeam[challenger.Division] = append(divisionToTeam[challenger.Division], challenger.Team)
+		}
+		if val, ok := teamMetrics[challenge.Defender]; ok {
+			defender = *val
+		} else {
+			defender.Team = challenge.Defender
+			defender.Round = challenge.Round
+			defender.Division = challenge.Division
+			teamMetrics[challenge.Defender] = &defender
+			divisionToTeam[defender.Division] = append(divisionToTeam[defender.Division], defender.Team)
+		}
 
-	// Generate ranking and upload to Firestore.
+		if challenge.ChallengerScore == 4 {
+			challenger.NumWins++
+			defender.NumLosses++
+		} else if challenge.DefenderScore == 4 {
+			defender.NumWins++
+			challenger.NumLosses++
+		} else {
+			return fmt.Errorf("Invalid scores detected for %d-%d: %s vs %s", challenge.Round, challenge.Code, challenger.Team, defender.Team)
+		}
+		challenger.NumSetsGained += challenge.ChallengerScore
+		challenger.NumSetsLost += challenge.DefenderScore
+		defender.NumSetsGained += challenge.DefenderScore
+		defender.NumSetsLost += challenge.ChallengerScore
+
+		_, err = tournament.Collection("teams").Doc(challenger.Team).Collection("metrics").Doc(challenge.Round.String()).Set(ctx, challenger)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Uploading to firestore successful:", challenger.Team)
+		_, err = tournament.Collection("teams").Doc(defender.Team).Collection("metrics").Doc(challenge.Round.String()).Set(ctx, defender)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Uploading to firestore successful:", defender.Team)
+	}
+
+	// Compute division metrics based on the team metrics.
+	for div := X; int(div) <= len(teamMetrics)/3; div++ {
+		teamsInDiv := divisionToTeam[div]
+		if len(teamsInDiv) == 0 {
+			break
+		}
+		var divMetadata DivisionMetadata
+		divMetadata.Division = div
+		tmpMaxScore, tmpMinScore := 0, 0
+		for _, team := range teamsInDiv {
+			teamMetric := teamMetrics[team]
+			setsWon := teamMetric.NumSetsGained - teamMetric.NumSetsLost
+			if teamMetric.NumWins == 2 {
+				divMetadata.Winner = team
+				tmpMaxScore = setsWon
+			} else if teamMetric.NumLosses == 2 {
+				divMetadata.Loser = team
+				tmpMinScore = setsWon
+			} else if setsWon > tmpMaxScore {
+				divMetadata.Winner = team
+				tmpMaxScore = setsWon
+			} else if setsWon < tmpMinScore {
+				divMetadata.Loser = team
+				tmpMinScore = setsWon
+			} else {
+				divMetadata.Neutral = team
+			}
+		}
+		if divMetadata.Neutral == "" && divMetadata.Winner != "" && divMetadata.Loser != "" {
+			for _, team := range teamsInDiv {
+				if team != divMetadata.Winner && team != divMetadata.Loser {
+					divMetadata.Neutral = team
+				}
+			}
+		}
+		fmt.Printf("Division %s Winner: %s Loser: %s Neutral: %s\n", div.String(), divMetadata.Winner, divMetadata.Loser, divMetadata.Neutral)
+		localRank = append(localRank, divMetadata.Winner)
+		localRank = append(localRank, divMetadata.Neutral)
+		localRank = append(localRank, divMetadata.Loser)
+		divisionMetrics[div] = &divMetadata
+	}
+
+	// Swap ranking based on loser information.
+	for div := X; int(div) < len(divisionMetrics)-1; div++ {
+		for rank, team := range localRank {
+			if team == divisionMetrics[div].Loser {
+				fmt.Printf("Swapping %s at rank %d with %s at rank %d\n", team, rank, localRank[rank+1], rank+1)
+				localRank[rank], localRank[rank+1] = localRank[rank+1], localRank[rank]
+				break
+			}
+		}
+	}
+
+	// Create a map to upload to Firestore.
+	for rank, team := range localRank {
+		if rank > 0 {
+			rankToUpload[strconv.Itoa(rank)] = team
+		}
+	}
+
+	// Upload new ranking to Firestore.
+	_, err := ranking.Doc(nextRound.String()).Set(ctx, rankToUpload)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateChallenges generate challenges based on the current team ranking and uploads it to Firestore.
-func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef) {
+func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, round Round) {
 	// Get ranking from current round.
 	teams := make(map[int]string)
-	tournamentdsnap, err := tournament.Get(ctx)
-	if err != nil {
-		log.Fatalln("Error reading tournament data from Firestore:", err)
-	}
-	tournamentdata := tournamentdsnap.Data()
-	var currentRound Round
-	t := tournamentdata["currentRound"].(int64)
-	currentRound = Round(t)
-	rankingdsnap, err := tournament.Collection("ranking").Doc(currentRound.String()).Get(ctx)
+	rankingdsnap, err := tournament.Collection("ranking").Doc(round.String()).Get(ctx)
 	if err != nil {
 		log.Fatalln("Error reading ranking from Firestore: ", err)
 	}
@@ -342,7 +486,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef) {
 			case 0:
 				var challenge Challenge
 				challenge.Division = division
-				challenge.Round = currentRound
+				challenge.Round = round
 				challenge.Defender = teams[teamRank]
 				challenge.DefenderRank = teamRank
 				challenge.Challenger = teams[teamRank+1]
@@ -351,7 +495,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef) {
 				challenges[strconv.Itoa(challenge.Code)] = challenge
 
 				challenge.Division = division
-				challenge.Round = currentRound
+				challenge.Round = round
 				challenge.Defender = teams[teamRank]
 				challenge.DefenderRank = teamRank
 				challenge.Challenger = teams[teamRank+2]
@@ -362,7 +506,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef) {
 			case 1:
 				var challenge Challenge
 				challenge.Division = division
-				challenge.Round = currentRound
+				challenge.Round = round
 				challenge.Defender = teams[teamRank]
 				challenge.DefenderRank = teamRank
 				challenge.Challenger = teams[teamRank+1]
@@ -415,7 +559,6 @@ func main() {
 	_, err = tournament.Set(ctx, map[string]interface{}{
 		"currentRound": currentRound,
 	}, firestore.MergeAll)
-
 	if err != nil {
 		log.Fatalln("Error writing to firebase:", err)
 	}
@@ -434,9 +577,15 @@ func main() {
 		fmt.Println("Init teams? y/n")
 		fmt.Scanln(&s)
 		if s == "y" {
-			err = InitTeams(ctx, teams, "spladder-teams.csv")
+			n, err := InitTeams(ctx, teams, "spladder-teams.csv")
 			if err != nil {
 				log.Fatalln("Error initialising teams:", err)
+			}
+			_, err = tournament.Set(ctx, map[string]interface{}{
+				"teamCount": n,
+			}, firestore.MergeAll)
+			if err != nil {
+				log.Fatal("Error writing to Firebae:", err)
 			}
 		}
 
@@ -454,7 +603,7 @@ func main() {
 		fmt.Println("Create challenges for initial round? y/n")
 		fmt.Scanln(&s)
 		if s == "y" {
-			CreateChallenges(ctx, tournament)
+			CreateChallenges(ctx, tournament, currentRound)
 		}
 	}
 
@@ -467,12 +616,21 @@ func main() {
 	fmt.Println("Generate new ranking based on the previous round scores? y/n")
 	fmt.Scanln(&s)
 	if s == "y" {
-		GenerateRanking(ctx, ranking, challenges)
+		err = GenerateRanking(ctx, tournament, challenges)
+		if err != nil {
+			log.Fatalln("Error generating ranking:", err)
+		}
 	}
 
-	fmt.Println("Create challenges for current round? y/n")
+	fmt.Println("Create challenges for next round? y/n")
 	fmt.Scanln(&s)
 	if s == "y" {
-		CreateChallenges(ctx, tournament)
+		CreateChallenges(ctx, tournament, currentRound+1)
+		_, err = tournament.Set(ctx, map[string]interface{}{
+			"currentRound": currentRound + 1,
+		}, firestore.MergeAll)
+		if err != nil {
+			log.Fatalln("Error writing to firebase:", err)
+		}
 	}
 }
