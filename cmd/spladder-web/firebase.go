@@ -202,8 +202,8 @@ func InitTeams(ctx context.Context, teams *firestore.CollectionRef, path string)
 					doc["player5"] = name
 				}
 			}
-			teamCount++
 		}
+		teamCount++
 		teamsDoc = append(teamsDoc, doc)
 	}
 
@@ -238,7 +238,7 @@ func InitRanking(ctx context.Context, teams *firestore.CollectionRef, ranking *f
 			rank: data["name"],
 		}, firestore.MergeAll)
 		if err != nil {
-			log.Printf("An error has occurred: %s", err)
+			return err
 		}
 	}
 	return nil
@@ -520,7 +520,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 	for i := 1; i < len(teams)+1; i++ {
 		challenge := challenges[strconv.Itoa(i)]
 		code := i
-		fmt.Printf("Spladder#4 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
+		fmt.Printf("Spladder#5 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
 			challenge.ChallengerRank, challenge.Challenger, challenge.DefenderRank, challenge.Defender)
 	}
 
@@ -549,7 +549,7 @@ func main() {
 	}
 	defer client.Close()
 
-	tournament := client.Collection("tournaments").Doc("spladder4")
+	tournament := client.Collection("tournaments").Doc("spladder5")
 
 	// Get current raound.
 	var currentRound Round
