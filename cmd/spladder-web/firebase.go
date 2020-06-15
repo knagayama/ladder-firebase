@@ -317,30 +317,36 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 		}
 		// Populate challenger related metrics
 		nextRound = challenge.Round + 1
-		var challenger, defender TeamMetadata
+		var challenger, defender *TeamMetadata
 		if val, ok := teamMetrics[challenge.Challenger]; ok {
-			challenger = *val
+			challenger = val
 		} else {
+			var c TeamMetadata
+			challenger = &c
 			challenger.Team = challenge.Challenger
 			challenger.Round = challenge.Round
 			challenger.Division = challenge.Division
-			teamMetrics[challenge.Challenger] = &challenger
+			teamMetrics[challenge.Challenger] = challenger
 			divisionToTeam[challenger.Division] = append(divisionToTeam[challenger.Division], challenger.Team)
 		}
 		if val, ok := teamMetrics[challenge.Defender]; ok {
-			defender = *val
+			defender = val
 		} else {
+			var d TeamMetadata
+			defender = &d
 			defender.Team = challenge.Defender
 			defender.Round = challenge.Round
 			defender.Division = challenge.Division
-			teamMetrics[challenge.Defender] = &defender
+			teamMetrics[challenge.Defender] = defender
 			divisionToTeam[defender.Division] = append(divisionToTeam[defender.Division], defender.Team)
 		}
 
 		if challenge.ChallengerScore == 4 {
+			fmt.Printf("%s won. %s lost.\n", challenger.Team, defender.Team)
 			challenger.NumWins++
 			defender.NumLosses++
 		} else if challenge.DefenderScore == 4 {
+			fmt.Printf("%s won. %s lost.\n", defender.Team, challenger.Team)
 			defender.NumWins++
 			challenger.NumLosses++
 		} else {
@@ -356,11 +362,13 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 			return err
 		}
 		fmt.Println("Uploading to firestore successful:", challenger.Team)
+		fmt.Println(challenger)
 		_, err = tournament.Collection("teams").Doc(defender.Team).Collection("metrics").Doc(challenge.Round.String()).Set(ctx, defender)
 		if err != nil {
 			return err
 		}
 		fmt.Println("Uploading to firestore successful:", defender.Team)
+		fmt.Println(defender)
 	}
 
 	// Compute division metrics based on the team metrics.
@@ -372,19 +380,26 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 		var divMetadata DivisionMetadata
 		divMetadata.Division = div
 		tmpMaxScore, tmpMinScore := 0, 0
+		defWon, defLost := false, false
 		for _, team := range teamsInDiv {
+			fmt.Printf("Checking %s\n", team)
 			teamMetric := teamMetrics[team]
+			fmt.Println(teamMetric)
 			setsWon := teamMetric.NumSetsGained - teamMetric.NumSetsLost
 			if teamMetric.NumWins == 2 {
+				fmt.Println(team, "won.")
 				divMetadata.Winner = team
 				tmpMaxScore = setsWon
+				defWon = true
 			} else if teamMetric.NumLosses == 2 {
+				fmt.Println(team, "lost.")
 				divMetadata.Loser = team
 				tmpMinScore = setsWon
-			} else if setsWon > tmpMaxScore {
+				defLost = true
+			} else if setsWon > tmpMaxScore && !defWon {
 				divMetadata.Winner = team
 				tmpMaxScore = setsWon
-			} else if setsWon < tmpMinScore {
+			} else if setsWon < tmpMinScore && !defLost {
 				divMetadata.Loser = team
 				tmpMinScore = setsWon
 			} else {
