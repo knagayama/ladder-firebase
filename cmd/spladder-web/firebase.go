@@ -494,7 +494,10 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 	challenges := make(map[string]Challenge)
 
 	// Generate a challenge for each team within the division.
-	for division, divTeam := range divisionToTeam {
+	for division, code := X, 1; int(division) <= len(teams)/3; division++ {
+		divTeam := divisionToTeam[division]
+		fmt.Println(division, divTeam)
+		numTeams := len(divTeam)
 		for key, teamRank := range divTeam {
 			fmt.Println(division, key, teamRank, teams[teamRank])
 			switch key {
@@ -506,28 +509,34 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 				challenge.DefenderRank = teamRank
 				challenge.Challenger = teams[teamRank+1]
 				challenge.ChallengerRank = teamRank + 1
-				challenge.Code = teamRank
+				challenge.Code = code
 				challenges[strconv.Itoa(challenge.Code)] = challenge
+				code++
 
-				challenge.Division = division
-				challenge.Round = round
-				challenge.Defender = teams[teamRank]
-				challenge.DefenderRank = teamRank
-				challenge.Challenger = teams[teamRank+2]
-				challenge.ChallengerRank = teamRank + 2
-				challenge.Code = teamRank + 1
-				challenges[strconv.Itoa(challenge.Code)] = challenge
-
+				if numTeams == 3 {
+					challenge.Division = division
+					challenge.Round = round
+					challenge.Defender = teams[teamRank]
+					challenge.DefenderRank = teamRank
+					challenge.Challenger = teams[teamRank+2]
+					challenge.ChallengerRank = teamRank + 2
+					challenge.Code = code
+					challenges[strconv.Itoa(challenge.Code)] = challenge
+					code++
+				}
 			case 1:
-				var challenge Challenge
-				challenge.Division = division
-				challenge.Round = round
-				challenge.Defender = teams[teamRank]
-				challenge.DefenderRank = teamRank
-				challenge.Challenger = teams[teamRank+1]
-				challenge.ChallengerRank = teamRank + 1
-				challenge.Code = teamRank + 1
-				challenges[strconv.Itoa(challenge.Code)] = challenge
+				if numTeams == 3 {
+					var challenge Challenge
+					challenge.Division = division
+					challenge.Round = round
+					challenge.Defender = teams[teamRank]
+					challenge.DefenderRank = teamRank
+					challenge.Challenger = teams[teamRank+1]
+					challenge.ChallengerRank = teamRank + 1
+					challenge.Code = code
+					challenges[strconv.Itoa(challenge.Code)] = challenge
+					code++
+				}
 			}
 		}
 	}
