@@ -415,7 +415,9 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 		}
 		fmt.Printf("Division %s Winner: %s Loser: %s Neutral: %s\n", div.String(), divMetadata.Winner, divMetadata.Loser, divMetadata.Neutral)
 		localRank = append(localRank, divMetadata.Winner)
-		localRank = append(localRank, divMetadata.Neutral)
+		if divMetadata.Neutral != "" {
+			localRank = append(localRank, divMetadata.Neutral)
+		}
 		localRank = append(localRank, divMetadata.Loser)
 		divisionMetrics[div] = &divMetadata
 	}
@@ -473,8 +475,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 
 	switch len(teams) % 3 {
 	// If len(teams) % 3 == 0, then all divisions have 3 teams.
-	// If len(teams) % 3 == 2, then last division has 2 teams.
-	case 0, 2:
+	case 0:
 		for i, j := 1, X; i < len(teams)+1; i++ {
 			divisionToTeam[j] = append(divisionToTeam[j], i)
 			if i%3 == 0 {
@@ -482,7 +483,8 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 			}
 		}
 	// If len(teams) % 3 == 1, then the top division and the last division have 2 teams.
-	case 1:
+	// If len(teams) % 3 == 2, then the top division has 2 teams.
+	case 1, 2:
 		for i, j := 1, X; i < len(teams)+1; i++ {
 			divisionToTeam[j] = append(divisionToTeam[j], i)
 			if i%3 == 2 {
@@ -544,7 +546,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 	for i := 1; i < len(teams)+1; i++ {
 		challenge := challenges[strconv.Itoa(i)]
 		code := i
-		fmt.Printf("Spladder#5 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
+		fmt.Printf("Spladder#6 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
 			challenge.ChallengerRank, challenge.Challenger, challenge.DefenderRank, challenge.Defender)
 	}
 
@@ -573,7 +575,7 @@ func main() {
 	}
 	defer client.Close()
 
-	tournament := client.Collection("tournaments").Doc("spladder5")
+	tournament := client.Collection("tournaments").Doc("spladder6")
 
 	// Get current raound.
 	var currentRound Round
