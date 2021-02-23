@@ -560,6 +560,64 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 	}
 }
 
+// AddNewTeam adds new team to the ranking.
+func AddNewTeam(ctx context.Context, tournament *firestore.DocumentRef, currentRound Round) error {
+	nextRound := currentRound + 1
+	ranking := tournament.Collection("ranking").Doc(nextRound.String())
+	oldRanking := make(map[int]string)
+	newRanking := make(map[int]string)
+	rankToUpload := make(map[string]string)
+	var s string
+	var j int
+	doc, err := ranking.Get(ctx)
+	if err != nil {
+		return err
+	}
+	data := doc.Data()
+	if err != nil {
+		return err
+	}
+	fmt.Println(currentRound)
+	fmt.Println("Current ranking:")
+	for i := 1; i < len(data)+1; i++ {
+		oldRanking[i] = fmt.Sprintf("%v", data[strconv.Itoa(i)])
+		fmt.Println(i, oldRanking[i])
+	}
+	fmt.Println("Type ranking to insert:")
+	fmt.Scanln(&j)
+	for i := 1; i < len(data)+2; i++ {
+		if i < j {
+			newRanking[i] = oldRanking[i]
+		} else if i == j {
+			fmt.Println("Type team name:")
+			fmt.Scanln(&s)
+			newRanking[i] = s
+		} else if i > j {
+			newRanking[i] = oldRanking[i-1]
+		}
+	}
+	fmt.Println("New ranking:")
+	for i := 1; i < len(newRanking)+1; i++ {
+		fmt.Println(i, newRanking[i])
+	}
+	// Create a map to upload to Firestore.
+	for rank, team := range newRanking {
+		if rank > 0 {
+			rankToUpload[strconv.Itoa(rank)] = team
+		}
+	}
+	// Upload new ranking to Firestore.
+	fmt.Println("Upload? y/n")
+	fmt.Scanln(&s)
+	if s == "y" {
+		_, err := tournament.Collection("ranking").Doc(nextRound.String()).Set(ctx, rankToUpload)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func main() {
 	// Initialize Firebase.
 	ctx := context.Background()
@@ -646,6 +704,12 @@ func main() {
 		if err != nil {
 			log.Fatalln("Error generating ranking:", err)
 		}
+	}
+
+	fmt.Println("Add new team? y/n")
+	fmt.Scanln(&s)
+	if s == "y" {
+		AddNewTeam(ctx, tournament, currentRound)
 	}
 
 	fmt.Println("Create challenges for next round? y/n")
