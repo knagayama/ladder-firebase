@@ -31,34 +31,24 @@ const (
 	SPlusUpper
 	SPlusLower
 	SUpper
-	SMiddle
 	SLower
 	APlusUpper
-	APlusMiddle
 	APlusLower
 	AUpper
-	AMiddle
 	ALower
 	AMinusUpper
-	AMinusMiddle
 	AMinusLower
 	BPlusUpper
-	BPlusMiddle
 	BPlusLower
 	BUpper
-	BMiddle
 	BLower
 	BMinusUpper
-	BMinusMiddle
 	BMinusLower
 	CPlusUpper
-	CPlusMiddle
 	CPlusLower
 	CUpper
-	CMiddle
 	CLower
 	CMinusUpper
-	CMinusMiddle
 	CMinusLower
 )
 
@@ -72,62 +62,42 @@ func (div Division) String() string {
 		return "S+ Lower"
 	case SUpper:
 		return "S Upper"
-	case SMiddle:
-		return "S Middle"
 	case SLower:
 		return "S Lower"
 	case APlusUpper:
 		return "A+ Upper"
-	case APlusMiddle:
-		return "A+ Middle"
 	case APlusLower:
 		return "A+ Lower"
 	case AUpper:
 		return "A Upper"
-	case AMiddle:
-		return "A Middle"
 	case ALower:
 		return "A Lower"
 	case AMinusUpper:
 		return "A- Upper"
-	case AMinusMiddle:
-		return "A- Middle"
 	case AMinusLower:
 		return "A- Lower"
 	case BPlusUpper:
 		return "B+ Upper"
-	case BPlusMiddle:
-		return "B+ Middle"
 	case BPlusLower:
 		return "B+ Lower"
 	case BUpper:
 		return "B Upper"
-	case BMiddle:
-		return "B Middle"
 	case BLower:
 		return "B Lower"
 	case BMinusUpper:
 		return "B- Upper"
-	case BMinusMiddle:
-		return "B- Middle"
 	case BMinusLower:
 		return "B- Lower"
 	case CPlusUpper:
 		return "C+ Upper"
-	case CPlusMiddle:
-		return "C+ Middle"
 	case CPlusLower:
 		return "C+ Lower"
 	case CUpper:
 		return "C Upper"
-	case CMiddle:
-		return "C Middle"
 	case CLower:
 		return "C Lower"
 	case CMinusUpper:
 		return "C- Upper"
-	case CMinusMiddle:
-		return "C- Middle"
 	case CMinusLower:
 		return "C- Lower"
 	default:
@@ -546,7 +516,7 @@ func CreateChallenges(ctx context.Context, tournament *firestore.DocumentRef, ro
 	for i := 1; i < len(teams)+1; i++ {
 		challenge := challenges[strconv.Itoa(i)]
 		code := i
-		fmt.Printf("Spladder#6 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
+		fmt.Printf("Spladder#8 Div %s [%d-%d] %d位 %s vs %d位 %s \n", challenge.Division.String(), challenge.Round, code,
 			challenge.ChallengerRank, challenge.Challenger, challenge.DefenderRank, challenge.Defender)
 	}
 
@@ -633,7 +603,7 @@ func main() {
 	}
 	defer client.Close()
 
-	tournament := client.Collection("tournaments").Doc("spladder6")
+	tournament := client.Collection("tournaments").Doc("spladder8")
 
 	// Get current raound.
 	var currentRound Round
