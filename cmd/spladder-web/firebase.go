@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 
 	"cloud.google.com/go/firestore"
@@ -123,6 +124,7 @@ type TeamMetadata struct {
 	Team          string   `firestore:"Team"`
 	Division      Division `firestore:"Division"`
 	Round         Round    `firestore:"Round"`
+	Rank          int      `firestore:"Rank"`
 	NumWins       int      `firestore:"NumWins"`
 	NumLosses     int      `firestore:"NumLosses"`
 	NumSetsGained int      `firestore:"NumSetsGained"`
@@ -296,6 +298,7 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 			challenger.Team = challenge.Challenger
 			challenger.Round = challenge.Round
 			challenger.Division = challenge.Division
+			challenger.Rank = challenge.ChallengerRank
 			teamMetrics[challenge.Challenger] = challenger
 			divisionToTeam[challenger.Division] = append(divisionToTeam[challenger.Division], challenger.Team)
 		}
@@ -307,6 +310,7 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 			defender.Team = challenge.Defender
 			defender.Round = challenge.Round
 			defender.Division = challenge.Division
+			defender.Rank = challenge.DefenderRank
 			teamMetrics[challenge.Defender] = defender
 			divisionToTeam[defender.Division] = append(divisionToTeam[defender.Division], defender.Team)
 		}
@@ -349,40 +353,31 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 		}
 		var divMetadata DivisionMetadata
 		divMetadata.Division = div
-		tmpMaxScore, tmpMinScore := 0, 0
-		defWon, defLost := false, false
+
+		teams := make([]*TeamMetadata, 0, len(teamsInDiv))
 		for _, team := range teamsInDiv {
-			fmt.Printf("Checking %s\n", team)
 			teamMetric := teamMetrics[team]
-			fmt.Println(teamMetric)
-			setsWon := teamMetric.NumSetsGained - teamMetric.NumSetsLost
-			if teamMetric.NumWins == 2 {
-				fmt.Println(team, "won.")
-				divMetadata.Winner = team
-				tmpMaxScore = setsWon
-				defWon = true
-			} else if teamMetric.NumLosses == 2 {
-				fmt.Println(team, "lost.")
-				divMetadata.Loser = team
-				tmpMinScore = setsWon
-				defLost = true
-			} else if setsWon > tmpMaxScore && !defWon {
-				divMetadata.Winner = team
-				tmpMaxScore = setsWon
-			} else if setsWon < tmpMinScore && !defLost {
-				divMetadata.Loser = team
-				tmpMinScore = setsWon
-			} else {
-				divMetadata.Neutral = team
-			}
+			teams = append(teams, teamMetric)
 		}
-		if divMetadata.Neutral == "" && divMetadata.Winner != "" && divMetadata.Loser != "" {
-			for _, team := range teamsInDiv {
-				if team != divMetadata.Winner && team != divMetadata.Loser {
-					divMetadata.Neutral = team
-				}
+		sort.Slice(teams, func(i, j int) bool {
+			t1 := teams[i]
+			t2 := teams[j]
+			t1Won := t1.NumSetsGained - t1.NumSetsLost
+			t2Won := t2.NumSetsGained - t2.NumSetsLost
+			if t1Won == t2Won {
+				return t1.Rank > t2.Rank
 			}
+			return t1Won > t2Won
+		})
+		if len(teamsInDiv) < 3 {
+			divMetadata.Winner = teams[0].Team
+			divMetadata.Loser = teams[1].Team
+		} else {
+			divMetadata.Winner = teams[0].Team
+			divMetadata.Neutral = teams[1].Team
+			divMetadata.Loser = teams[2].Team
 		}
+
 		fmt.Printf("Division %s Winner: %s Loser: %s Neutral: %s\n", div.String(), divMetadata.Winner, divMetadata.Loser, divMetadata.Neutral)
 		localRank = append(localRank, divMetadata.Winner)
 		if divMetadata.Neutral != "" {
