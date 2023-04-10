@@ -362,12 +362,15 @@ func GenerateRanking(ctx context.Context, tournament *firestore.DocumentRef, cha
 		sort.Slice(teams, func(i, j int) bool {
 			t1 := teams[i]
 			t2 := teams[j]
+			if t1.NumWins != t2.NumWins {
+				return t1.NumWins > t2.NumWins
+			}
 			t1Won := t1.NumSetsGained - t1.NumSetsLost
 			t2Won := t2.NumSetsGained - t2.NumSetsLost
-			if t1Won == t2Won {
-				return t1.Rank > t2.Rank
+			if t1Won != t2Won {
+				return t1Won > t2Won
 			}
-			return t1Won > t2Won
+			return t1.Rank > t2.Rank
 		})
 		if len(teamsInDiv) < 3 {
 			divMetadata.Winner = teams[0].Team
